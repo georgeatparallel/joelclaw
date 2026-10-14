@@ -173,8 +173,6 @@ const ROAM_ARCHIVE =
   process.env.ROAM_ARCHIVE_PATH ??
   `${process.env.HOME}/Code/joelhooks/egghead-roam-research/egghead-2026-01-19-13-09-38.edn`;
 
-const TYPESENSE_FALLBACK_KEY =
-  "391a65d92ff0b1d63af0e0d6cca04fdff292b765d833a65a25fb928b8a0fb065";
 
 function shellSafe(s: string): string {
   return s.replace(/'/g, "'\\''");
@@ -220,7 +218,7 @@ function enrichContactPipeline(
     handler: "shell",
     config: {
       command: [
-        `API_KEY=$(secrets lease typesense_api_key --ttl 5m 2>/dev/null || echo '${TYPESENSE_FALLBACK_KEY}')`,
+        `API_KEY=$(secrets lease typesense_api_key --ttl 5m 2>/dev/null)`,
         `curl -sS --max-time 10 "http://localhost:8108/multi_search" \\`,
         `  -H "X-TYPESENSE-API-KEY: $API_KEY" \\`,
         `  -H "Content-Type: application/json" \\`,

@@ -11,7 +11,7 @@ metadata:
   namespace: joelclaw
 type: Opaque
 stringData:
-  api-key: "391a65d92ff0b1d63af0e0d6cca04fdff292b765d833a65a25fb928b8a0fb065"
+  api-key: "REPLACE_WITH_TYPESENSE_API_KEY" # k8s retired; never commit the real key
 ---
 apiVersion: apps/v1
 kind: StatefulSet
