@@ -37,11 +37,11 @@ Prereqs:
 - Ollama running locally (`ollama serve`)
 - `qwen3-embedding:8b` pulled (`ollama pull qwen3-embedding:8b`)
 - Typesense reachable at `localhost:8108` via the SSH tunnel to Colima
-- Env: `TYPESENSE_API_KEY` set (see `~/Code/joelhooks/joelclaw/k8s/typesense.yaml`)
+- Env: `TYPESENSE_API_KEY` set (lease it from agent-secrets: `secrets lease typesense_api_key`)
 
 ```bash
 cd ~/Code/joelhooks/joelclaw
-export TYPESENSE_API_KEY=391a65d92ff0b1d63af0e0d6cca04fdff292b765d833a65a25fb928b8a0fb065
+export TYPESENSE_API_KEY="$(secrets lease typesense_api_key --ttl 15m)"
 
 # Ingest a real claude-code session into the spike collection
 bun scripts/memory-spike/ingest.ts ~/.claude/projects/-Users-joel/a97e5c2b-bd82-4a63-ac5a-9df7e5f3cbaf.jsonl

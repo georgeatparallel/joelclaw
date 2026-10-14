@@ -13,8 +13,6 @@ const ROAM_ARCHIVE_PATH =
   `${HOME_DIR}/Code/joelhooks/egghead-roam-research/egghead-2026-01-19-13-09-38.edn`;
 const TYPESENSE_HOST = "http://localhost:8108";
 const QDRANT_HOST = "http://localhost:6333";
-const FALLBACK_TYPESENSE_API_KEY =
-  "391a65d92ff0b1d63af0e0d6cca04fdff292b765d833a65a25fb928b8a0fb065";
 
 type ContactHints = {
   slack_user_id?: string;
@@ -298,8 +296,10 @@ function resolveTypesenseApiKey(): string {
   if (envKey) return envKey;
   try {
     return leaseSecret("typesense_api_key", "15m");
-  } catch {
-    return FALLBACK_TYPESENSE_API_KEY;
+  } catch (error) {
+    throw new Error(
+      `TYPESENSE_API_KEY is unset and leasing typesense_api_key failed: ${String(error)}`,
+    );
   }
 }
 
