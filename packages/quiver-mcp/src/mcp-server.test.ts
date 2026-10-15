@@ -69,7 +69,7 @@ describe("quiver MCP server", () => {
         await client.callTool({ name: "quiver_generate_svg", arguments: { prompt: "A rat on a stack", n: 2 } }),
       ) as { ok: boolean; files: { path: string; bytes: number }[]; svg: string[]; credits: number; model: string };
       expect(result.ok).toBe(true);
-      expect(result.model).toBe("arrow-1.1");
+      expect(result.model).toBe("arrow-2");
       expect(result.credits).toBe(6);
       expect(result.svg).toEqual(["<svg>1</svg>", "<svg>2</svg>"]);
       expect(result.files.map((file) => file.path)).toEqual([
@@ -77,7 +77,7 @@ describe("quiver MCP server", () => {
         join(outDir, "20260922-093005-a-rat-on-a-stack-2.svg"),
       ]);
       expect(await readFile(result.files[1]!.path, "utf8")).toBe("<svg>2</svg>");
-      expect(log[0]).toEqual(["generate", { prompt: "A rat on a stack", model: "arrow-1.1", n: 2 }]);
+      expect(log[0]).toEqual(["generate", { prompt: "A rat on a stack", model: "arrow-2", n: 2 }]);
     } finally {
       await client.close();
       await server.close();

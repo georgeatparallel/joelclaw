@@ -8,7 +8,7 @@ import { QuiverError, type QuiverClient, type SvgResponse } from "./quiver-clien
 export const SERVER_NAME = "quiver-mcp";
 export const SERVER_VERSION = "0.1.0";
 export const DEFAULT_OUT_DIR = "/Users/joel/.joelclaw/quiver-out";
-export const DEFAULT_GENERATE_MODEL = "arrow-1.1";
+export const DEFAULT_GENERATE_MODEL = "arrow-2";
 export const DEFAULT_VECTORIZE_MODEL = "arrow-2";
 /** SVG markup up to this many bytes is returned inline; larger output is file-only. */
 export const INLINE_SVG_LIMIT = 64 * 1024;
@@ -153,7 +153,7 @@ export function createQuiverMcpServer(options: QuiverMcpOptions): McpServer {
     "quiver_generate_svg",
     {
       title: "Generate SVG from text",
-      description: `Generate one or more SVGs from a text prompt with QuiverAI Arrow. Spends Quiver credits per output. Files are saved under ${outDir} and the paths are returned; markup is returned inline when the total is under ${INLINE_SVG_LIMIT} bytes. Default model ${DEFAULT_GENERATE_MODEL}; use arrow-1.1-max for dense technical diagrams.`,
+      description: `Generate one or more SVGs from a text prompt with QuiverAI Arrow. Spends Quiver balance (Arrow 2 bills by tokens). Files are saved under ${outDir} and the paths are returned; markup is returned inline when the total is under ${INLINE_SVG_LIMIT} bytes. Default model ${DEFAULT_GENERATE_MODEL}; use arrow-2-telos for dense technical diagrams. Arrow 1.x retired on 2026-10-16.`,
       inputSchema: {
         prompt: z.string().min(1).max(4000).describe("What to draw. Be concrete about subject, style, and composition."),
         instructions: z
