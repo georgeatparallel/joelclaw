@@ -135,6 +135,7 @@ class DecisionGuardTest(unittest.TestCase):
 
         agent = main.JoelclawVoiceAgent(Mock(), "voice", caller_verified=True)
         agent.room = "room-1"
+        agent.trusted = True
         agent.save_transcript = lambda: "/tmp/t.md"
         return agent
 
@@ -276,6 +277,104 @@ class ReviewRegressionTest(DecisionGuardTest):
             with patch.object(voice_snapshot, "RATKING_CONFIG", cfg), patch.object(voice_snapshot, "CALLSIGNS_PATH", _Path(d) / "none"):
                 names = [e["name"] for e in voice_snapshot.directory([])]
         self.assertEqual(names, ["switchboard"])
+
+
+class InboundLockTest(DecisionGuardTest):
+    def test_outbound_detection_fails_closed(self) -> None:
+        import main
+
+        joel = "+18175550100"
+        ours = {"sip.trunkID": main.OUTBOUND_TRUNK_ID, "sip.phoneNumber": joel}
+        self.assertTrue(main.call_is_outbound("call-outbound-joel-123", ours, True, joel))
+        self.assertFalse(main.call_is_outbound("call-outbound-joel-123", {}, True, joel))
+        self.assertFalse(main.call_is_outbound("call-outbound-joel-123", ours, False, joel))
+        self.assertFalse(main.call_is_outbound("voice-_8175550100_abc", ours, True, joel))
+        self.assertFalse(main.call_is_outbound("call-outbound-joel-123", {**ours, "sip.ruleID": "SDR_x"}, True, joel))
+        self.assertFalse(main.call_is_outbound("call-outbound-joel-123", {**ours, "sip.trunkID": "ST_other"}, True, joel))
+        self.assertFalse(main.call_is_outbound("call-outbound-joel-123", {**ours, "sip.phoneNumber": "+15555550123"}, True, joel))
+
+    def test_inbound_call_cannot_send_decide_or_text(self) -> None:
+        agent = self._agent()
+        agent.trusted = False
+        with patch.object(voice_snapshot, "read", return_value=self._snapshot()), patch.object(ratking_cli, "send") as send:
+            outs = [
+                self._call(agent.send_to_desk, "switchboard", "do a thing"),
+                self._call(agent.record_decision, "41a8c6ca", "yes"),
+                self._call(agent.text_joel, "hi"),
+            ]
+            items = self._call(agent.switchboard_items)
+        send.assert_not_called()
+        self.assertTrue(all(o.startswith("LOCKED") for o in outs))
+        self.assertIn("verify_by_callback", outs[0])
+        self.assertNotIn("LOCKED", items)
+
+    def test_inbound_tool_allowlist_is_read_only_and_real(self) -> None:
+        import main
+
+        agent = self._agent()
+        names = {getattr(getattr(t, "info", None), "name", None) for t in agent.tools}
+        self.assertLessEqual(main.INBOUND_READ_TOOLS, names)  # no typos: every allowed tool exists
+        for write in ("send_to_desk", "record_decision", "text_joel", "slack_reply", "send_event", "add_task",
+                      "create_calendar_event", "delete_calendar_event", "call_joel", "save_voice", "check_email", "slack_search"):
+            self.assertNotIn(write, main.INBOUND_READ_TOOLS)
+
+    def test_callback_cooldown_and_daily_cap(self) -> None:
+        import tempfile as _tempfile
+        from pathlib import Path as _Path
+
+        import main
+
+        with _tempfile.TemporaryDirectory() as d, patch.object(main, "CALLBACK_STATE", _Path(d) / "cb.json"):
+            t = 100_000.0
+            self.assertTrue(main.callback_allowed(now=t))
+            self.assertFalse(main.callback_allowed(now=t + 60))
+            allowed = [main.callback_allowed(now=t + i * (main.CALLBACK_COOLDOWN_S + 1)) for i in range(1, 8)]
+        self.assertEqual(sum(allowed), main.CALLBACK_DAILY_CAP - 1)
+
+    def test_callback_needs_joels_number_carries_nothing_and_fires_once(self) -> None:
+        import asyncio
+
+        import main
+
+        self.assertNotIn("{", main.CALLBACK_REASON)
+        stranger = self._agent()
+        stranger.trusted = False
+        stranger._caller_verified = False
+        self.assertTrue(self._call(stranger.verify_by_callback).startswith("FAILED"))
+
+        agent = self._agent()
+        agent.trusted = False
+        fired, hung = [], []
+        agent.spawn_callback = lambda: fired.append(1) or True
+        agent.hang_up = lambda: hung.append(1)
+
+        async def run():
+            first = await agent.verify_by_callback()
+            second = await agent.verify_by_callback()
+            await asyncio.sleep(0.2)
+            return first, second
+
+        with patch.object(main, "CALLBACK_HANGUP_S", 0.05), patch.object(main, "callback_allowed", return_value=True):
+            first, second = asyncio.run(run())
+        self.assertIn("Call-back scheduled", first)
+        self.assertIn("already on its way", second)
+        self.assertEqual(fired, [1])
+        self.assertEqual(hung, [1])
+
+        broken = self._agent()
+        broken.trusted = False
+        broken.spawn_callback = lambda: False
+        with patch.object(main, "callback_allowed", return_value=True):
+            self.assertTrue(self._call(broken.verify_by_callback).startswith("FAILED"))
+
+    def test_outbound_trust_defaults_to_configured_number(self) -> None:
+        import main
+
+        attrs = {"sip.trunkID": main.OUTBOUND_TRUNK_ID, "sip.phoneNumber": "+18175550100"}
+        with patch.dict("os.environ", {"JOEL_PHONE_NUMBER": "+18175550100"}):
+            self.assertTrue(main.call_is_outbound("call-outbound-joel-1", attrs, True))
+        with patch.dict("os.environ", {"JOEL_PHONE_NUMBER": ""}):
+            self.assertFalse(main.call_is_outbound("call-outbound-joel-1", attrs, True))
 
 
 if __name__ == "__main__":
