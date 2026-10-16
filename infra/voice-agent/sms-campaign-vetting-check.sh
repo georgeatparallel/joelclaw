@@ -11,7 +11,6 @@ CAMPAIGN_ID="4b30019f-5c00-f617-8e3c-bda78fb2fda1"
 # we retry deleting it each run until Telnyx lets go of it.
 OLD_CAMPAIGN_ID="4b30019f-5bf8-c0c8-c836-616b50a35694"
 PUBLIC_DID="+13609258342"
-NOTIFY="/opt/homebrew/bin/joelclaw"
 
 lease() {
   local value
@@ -20,10 +19,11 @@ lease() {
   printf '%s' "$value"
 }
 
+VOICE_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# Alerts go to the Switchboard over Rat King, latched so a daily run says each
+# thing once. (joelclaw notify is retired; it dropped every alert silently.)
 notify() {
-  if [ -x "$NOTIFY" ] || command -v joelclaw >/dev/null 2>&1; then
-    joelclaw notify send --priority normal "$1" || true
-  fi
+  "$VOICE_DIR/.venv/bin/python" "$VOICE_DIR/fleet_alert.py" --latch sms-vetting --summary "$1" --body "${2:-$1}" || true
 }
 
 API_KEY="$(lease telnyx_api_key)"
@@ -31,6 +31,17 @@ API_KEY="$(lease telnyx_api_key)"
 # Best-effort cleanup of the superseded campaign; quiet on any outcome.
 curl -sS -X DELETE -H "Authorization: Bearer $API_KEY" \
   "https://api.telnyx.com/v2/10dlc/campaign/$OLD_CAMPAIGN_ID" >/dev/null 2>&1 || true
+
+# A rejected campaign never clears by waiting: say so once, with the reasons.
+campaign="$(curl -fsS -H "Authorization: Bearer $API_KEY" "https://api.telnyx.com/v2/10dlc/campaign/$CAMPAIGN_ID" || true)"
+state="$(printf '%s' "$campaign" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("campaignStatus",""))' 2>/dev/null || true)"
+case "$state" in
+  TELNYX_FAILED|MNO_REJECTED|EXPIRED|TCR_EXPIRED)
+    reasons="$(printf '%s' "$campaign" | python3 -c 'import json,sys; print(" | ".join(r.get("description","") for r in json.load(sys.stdin).get("failureReasons") or [])[:1200])' 2>/dev/null || true)"
+    notify "ShitRat SMS: public-line 10DLC campaign is $state, not vetting. It won't clear until it's fixed and resubmitted." "Campaign $CAMPAIGN_ID is $state. Reasons: ${reasons:-none given}"
+    exit 0
+    ;;
+esac
 
 # Already attached? Then we're done — quiet exit.
 assigned="$(curl -fsS -H "Authorization: Bearer $API_KEY" \

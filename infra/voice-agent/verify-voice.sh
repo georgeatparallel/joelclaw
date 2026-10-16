@@ -179,13 +179,12 @@ if [[ "$status" -ne 0 ]]; then
   joined="$(IFS=', '; echo "${failures[*]}")"
   if [[ "$joined" != "$last_failures" ]]; then
     printf '%s\n' "$joined" >| "$STATE_FILE"
-    joelclaw send notification/call.requested "{\"message\":\"verify-voice FAILED on flagg: $joined\"}" || true
-    joelclaw notify send "verify-voice FAILED: $joined" --priority urgent || true
+    "$PWD/.venv/bin/python" "$PWD/fleet_alert.py" --summary "verify-voice FAILED on Flagg: $joined" --body "Probe output: ~/.local/log/verify-voice.log" || true
   else
     printf 'suppressed repeat alert (unchanged failure set): %s\n' "$joined"
   fi
 elif [[ -n "$last_failures" ]]; then
   rm -f "$STATE_FILE"
-  joelclaw notify send "verify-voice recovered on flagg (was failing: $last_failures)" || true
+  "$PWD/.venv/bin/python" "$PWD/fleet_alert.py" --summary "verify-voice recovered on Flagg (was failing: $last_failures)" || true
 fi
 exit "$status"
