@@ -1,0 +1,12 @@
+# Spoken forms for TTS only (see pronounce.py). Whole-word, case-insensitive.
+# Transcripts and sends keep the real spelling. Ask Joel to correct any that
+# sound wrong.
+words:
+  celld: "cell D"
+  herdr: "herder"
+  drovr: "drover"
+  pi: "pie"
+  Jev: "jev"
+  ratstack: "rat stack"
+  wzrrd: "wizard"
+  AIH: "A I Hero"
