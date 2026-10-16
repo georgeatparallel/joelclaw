@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 
 FILLER = {"the", "desk", "agent", "owner", "boss", "please", "to", "a"}
+# Common words that say nothing about which item is meant.
+STOPWORDS = FILLER | {"and", "or", "of", "for", "on", "in", "it", "is", "our", "we", "that", "this", "with", "from", "fix", "name", "one"}
 
 
 def norm(text: str) -> str:
@@ -58,7 +60,7 @@ def body(message: str, kind: str) -> str:
         if kind == "ask"
         else ""
     )
-    return f"{lead}: {message}{reply}\n\nSent by switchboard/voice after Joel confirmed the readback. Switchboard copied."
+    return f"{lead}: {message}{reply}\n\nSent by switchboard/voice on Joel's spoken instruction. Switchboard copied."
 
 
 def find_item(ref: str, items: list[dict]) -> dict | None:
@@ -67,14 +69,19 @@ def find_item(ref: str, items: list[dict]) -> dict | None:
     for item in items:
         if item.get("id") and norm(item["id"]) == ref_norm:
             return item
-    words = set(_words(ref))
+    words = set(_words(ref)) - STOPWORDS
     if not words:
         return None
-    scored = sorted(
-        ((len(words & set(_words(item.get("title", "")))), item) for item in items),
-        key=lambda pair: pair[0],
-        reverse=True,
-    )
-    if scored and scored[0][0] >= 2 and (len(scored) == 1 or scored[0][0] > scored[1][0]):
-        return scored[0][1]
+
+    def score(item: dict) -> tuple[int, int]:
+        title = set(_words(item.get("title", ""))) - STOPWORDS
+        return len(words & title), len(title)
+
+    scored = sorted(((score(item), item) for item in items), key=lambda pair: pair[0][0], reverse=True)
+    if not scored:
+        return None
+    (overlap, size), best = scored[0]
+    # At least two meaningful words, half the title's, and a clear winner.
+    if overlap >= 2 and overlap * 2 >= size and (len(scored) == 1 or overlap > scored[1][0][0]):
+        return best
     return None

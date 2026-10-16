@@ -220,5 +220,63 @@ class PronounceTest(unittest.TestCase):
         self.assertEqual(asyncio.run(collect()), "the cell D node is up")
 
 
+class ReviewRegressionTest(DecisionGuardTest):
+    def test_parallel_duplicate_decisions_send_once(self) -> None:
+        import asyncio
+
+        agent = self._agent()
+
+        def slow_send(*args, **kwargs):
+            time.sleep(0.05)
+            return ratking_cli.SendResult("delivered", id="3mx1")
+
+        async def both():
+            return await asyncio.gather(
+                agent.record_decision("41a8c6ca", "yes"), agent.record_decision("41a8c6ca", "yes")
+            )
+
+        with patch.object(voice_snapshot, "read", return_value=self._snapshot()), patch.object(
+            ratking_cli, "send", side_effect=slow_send
+        ) as send:
+            results = asyncio.run(both())
+        self.assertEqual(send.call_count, 1)
+        self.assertTrue(any("Not sending twice" in r for r in results))
+
+    def test_refused_send_can_be_retried_but_uncertain_cannot(self) -> None:
+        agent = self._agent()
+        with patch.object(voice_snapshot, "read", return_value=self._snapshot()), patch.object(ratking_cli, "send") as send:
+            send.return_value = ratking_cli.SendResult("refused", "UnknownName")
+            self._call(agent.record_decision, "41a8c6ca", "yes")
+            send.return_value = ratking_cli.SendResult("uncertain", "timed out")
+            self._call(agent.record_decision, "41a8c6ca", "yes")
+            third = self._call(agent.record_decision, "41a8c6ca", "yes")
+        self.assertEqual(send.call_count, 2)
+        self.assertIn("Not sending twice", third)
+
+    def test_send_to_desk_refuses_an_identical_repeat(self) -> None:
+        agent = self._agent()
+        with patch.object(voice_snapshot, "read", return_value=self._snapshot()), patch.object(
+            ratking_cli, "send", return_value=ratking_cli.SendResult("delivered", id="x")
+        ) as send:
+            self._call(agent.send_to_desk, "switchboard", "Pull the celld details")
+            again = self._call(agent.send_to_desk, "the switchboard", "pull the celld details.")
+        self.assertEqual(send.call_count, 1)
+        self.assertIn("Not sending twice", again)
+
+    def test_reserved_names_are_an_allowlist(self) -> None:
+        import json as _json
+        import tempfile as _tempfile
+        from pathlib import Path as _Path
+
+        with _tempfile.TemporaryDirectory() as d:
+            cfg = _Path(d) / "pi.json"
+            cfg.write_text(_json.dumps({"reserved": {
+                "switchboard": {"aliases": ["ernestine"]}, "joel-iphone": {}, "operator": {}, "some-human": {},
+            }}))
+            with patch.object(voice_snapshot, "RATKING_CONFIG", cfg), patch.object(voice_snapshot, "CALLSIGNS_PATH", _Path(d) / "none"):
+                names = [e["name"] for e in voice_snapshot.directory([])]
+        self.assertEqual(names, ["switchboard"])
+
+
 if __name__ == "__main__":
     unittest.main()

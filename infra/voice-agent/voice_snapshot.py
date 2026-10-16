@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,10 @@ MAIL_OVERLAP = 200
 ESCALATION_SENDER = "switchboard/ea"
 STALE_SECONDS = 15 * 60
 RENDER_CAP = 10_000
+MAIL_CURSOR_PATH = STATE_DIR / "mail-offered.json"
+# Reserved Rat King names a call may address: fleet agents only. Anything else
+# in pi.json's reserved table (a phone, the operator) stays unreachable.
+RESERVED_AGENTS = {"switchboard", "pennywise-owner", "rubicon-fitness-owner", "cliproxy-owner"}
 
 
 def _now() -> float:
@@ -175,7 +180,7 @@ def directory(projects: list[dict]) -> list[dict]:
     except (OSError, json.JSONDecodeError):
         reserved = {}
     for name, entry in reserved.items():
-        if name in ("operator", "joel-iphone"):
+        if name not in RESERVED_AGENTS:
             continue
         aliases = (entry.get("aliases") or []) if isinstance(entry, dict) else []
         names.append({"name": name, "callsign": aliases[0] if aliases else None, "project": None, "label": name, "role": "owner"})
@@ -272,10 +277,29 @@ def read(path: Path = SNAPSHOT_PATH) -> dict | None:
 
 def write(snapshot: dict, path: Path = SNAPSHOT_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(snapshot, ensure_ascii=False, indent=1))
-    os.chmod(tmp, 0o600)
-    tmp.replace(path)
+    # A unique temp file per writer: the timer, the dial and a mid-call refresh can overlap.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".snapshot.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=1)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def mail_offered_seq() -> int:
+    """Highest call-line mail seq already offered on a call, so mail is offered once."""
+    try:
+        return int(json.loads(MAIL_CURSOR_PATH.read_text()).get("seq", 0))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return 0
+
+
+def set_mail_offered_seq(seq: int) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    MAIL_CURSOR_PATH.write_text(json.dumps({"seq": max(seq, mail_offered_seq())}))
 
 
 def age_seconds(snapshot: dict, now: float | None = None) -> float | None:
