@@ -43,5 +43,9 @@ print(json.dumps(req))
 EOF
 )"
 
+# Fresh Switchboard snapshot for the call (no LLM, ~1 s); a failure never blocks the dial.
+VOICE_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+"$VOICE_DIR/.venv/bin/python" "$VOICE_DIR/voice_snapshot.py" --fast >/dev/null 2>&1 || true
+
 echo "Calling Joel (room: $ROOM)..."
 printf '%s' "$REQUEST" | lk sip participant create -

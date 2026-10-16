@@ -175,17 +175,22 @@ mkdir -p /tmp/joelclaw
 last_failures=""
 [[ -f "$STATE_FILE" ]] && last_failures="$(cat "$STATE_FILE")"
 
+VOICE_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+alert() { "$VOICE_DIR/.venv/bin/python" "$VOICE_DIR/fleet_alert.py" "$@"; }
+
+# The latch moves only after the alert is delivered, so a failed send retries next tick.
 if [[ "$status" -ne 0 ]]; then
   joined="$(IFS=', '; echo "${failures[*]}")"
   if [[ "$joined" != "$last_failures" ]]; then
-    printf '%s\n' "$joined" >| "$STATE_FILE"
-    joelclaw send notification/call.requested "{\"message\":\"verify-voice FAILED on flagg: $joined\"}" || true
-    joelclaw notify send "verify-voice FAILED: $joined" --priority urgent || true
+    if alert --summary "verify-voice FAILED on Flagg: $joined" --body "Probe output: ~/.local/log/verify-voice.log"; then
+      printf '%s\n' "$joined" >| "$STATE_FILE"
+    fi
   else
     printf 'suppressed repeat alert (unchanged failure set): %s\n' "$joined"
   fi
 elif [[ -n "$last_failures" ]]; then
-  rm -f "$STATE_FILE"
-  joelclaw notify send "verify-voice recovered on flagg (was failing: $last_failures)" || true
+  if alert --summary "verify-voice recovered on Flagg (was failing: $last_failures)"; then
+    rm -f "$STATE_FILE"
+  fi
 fi
 exit "$status"
