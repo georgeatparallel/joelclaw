@@ -1,7 +1,7 @@
 import subprocess
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import ratking_cli
 import voice_desk
@@ -308,15 +308,32 @@ class InboundLockTest(DecisionGuardTest):
         self.assertIn("verify_by_callback", outs[0])
         self.assertNotIn("LOCKED", items)
 
-    def test_inbound_tool_allowlist_is_read_only_and_real(self) -> None:
+    def test_inbound_allowlist_is_time_voice_and_callback_only(self) -> None:
         import main
 
         agent = self._agent()
         names = {getattr(getattr(t, "info", None), "name", None) for t in agent.tools}
         self.assertLessEqual(main.INBOUND_READ_TOOLS, names)  # no typos: every allowed tool exists
-        for write in ("send_to_desk", "record_decision", "text_joel", "slack_reply", "send_event", "add_task",
-                      "create_calendar_event", "delete_calendar_event", "call_joel", "save_voice", "check_email", "slack_search"):
-            self.assertNotIn(write, main.INBOUND_READ_TOOLS)
+        self.assertEqual(
+            main.INBOUND_READ_TOOLS,
+            {"verify_by_callback", "current_time", "list_voices", "sample_voices", "switch_voice", "adjust_voice"},
+        )
+
+    def test_locked_call_hears_and_relays_nothing_private(self) -> None:
+        import main
+
+        self.assertIn("call you straight back so I know it's you", main.LOCKED_OPENER)
+        for leak in ("USER.md", "SOUL", "snapshot", "memory"):
+            self.assertNotIn(leak, main.LOCKED_INSTRUCTIONS)
+        agent = main.JoelclawVoiceAgent(MagicMock(), "voice", caller_verified=True, instructions=main.LOCKED_INSTRUCTIONS)
+        self.assertEqual(agent.instructions, main.LOCKED_INSTRUCTIONS)
+
+        summary, body = main.locked_note_text("voice-_x_1", "/tmp/t.md", [{"type": "callback", "status": "scheduled"}])
+        self.assertIn("scheduled to Joel", summary)
+        self.assertIn("not relayed", body)
+        self.assertNotIn("/tmp/t.md", body)
+        summary, _ = main.locked_note_text("voice-_x_1", None, [{"type": "callback", "status": "refused"}])
+        self.assertIn("not placed (refused)", summary)
 
     def test_callback_cooldown_and_daily_cap(self) -> None:
         import tempfile as _tempfile
