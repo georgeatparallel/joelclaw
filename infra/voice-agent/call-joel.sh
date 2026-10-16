@@ -48,4 +48,12 @@ VOICE_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 "$VOICE_DIR/.venv/bin/python" "$VOICE_DIR/voice_snapshot.py" --fast >/dev/null 2>&1 || true
 
 echo "Calling Joel (room: $ROOM)..."
-printf '%s' "$REQUEST" | lk sip participant create -
+if ! printf '%s' "$REQUEST" | lk sip participant create -; then
+  # No answer or a failed dial: one chat note for this call, never a redial.
+  ABOUT="${REASON#\[test\] }"
+  NOTE="I tried to call you and couldn't get through."
+  [ -n "$ABOUT" ] && NOTE="$NOTE It was about: ${ABOUT:0:240}"
+  NOTE="$NOTE I won't call again for this. Reply here or call me back when you can."
+  "$VOICE_DIR/.venv/bin/python" "$VOICE_DIR/joel_note.py" --key "$ROOM" --kind needs_joel "$NOTE" || true
+  exit 1
+fi
