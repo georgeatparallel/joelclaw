@@ -145,7 +145,7 @@ the existing research synthesis prompt. Pi inference, local Vault access and
 optional memory enrichment keep their existing setup.
 
 Use `--search-provider duckduckgo` to select the original provider explicitly, or
-`--search-provider none` to synthesize without web access. An invalid or missing
+`--search-provider none` to skip the web-search DAG node. An invalid or missing
 provider value fails before submitting the DAG. A Parallel error fails the node;
 it does not silently switch providers. The service has free-tier usage limits.
 
